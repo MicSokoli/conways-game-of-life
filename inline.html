@@ -1,0 +1,229 @@
+<!doctype html>
+<html>
+<head>
+	
+</head>
+<body>
+	<canvas id="game_canvas" style="border: 1px solid black; cursor: default;"></canvas>
+	<br>
+	<button id="make_step">STEP</button>
+	<button id="play">PLAY</button>
+	<button id="pause">PAUSE</button>
+	<button id="clear">CLEAR</button>
+	<script>
+		var canvas = document.getElementById("game_canvas"); // Get first canvas element
+		var context = canvas.getContext("2d"); // Get 2D drawing context
+
+		var timeBetweenSteps = 10;
+
+		var gameRows = 150;
+		var gameColumns = 150;
+
+		var cellSize = 10; // The dimensions of the square that represents a cell. The square will be sorrounded by a border.
+		var cellFrameSize = cellSize; // cellSize + borderWidth
+
+		var canvasHeight = gameRows * cellFrameSize;
+		var canvasWidth = gameColumns * cellFrameSize;
+
+		canvas.height = canvasHeight;
+		canvas.width  = canvasWidth;
+
+		function gameCell(state) {
+		  this.state = state;
+		  this.oldState = state; 
+		}
+
+		var gameInstance = new Array(gameRows);
+		for (var i = 0; i < gameInstance.length; i++) {
+			gameInstance[i] = new Array(gameColumns);
+			for (var j = 0; j < gameInstance[i].length; j++) {
+				gameInstance[i][j] = new gameCell(0);
+				//gameInstance[i][j] = new gameCell(Math.random() > .9 ? 1 : 0); // Generates a random initial state.
+			}
+		}
+
+		drawFrame();
+
+		function updateCells() {
+			gameInstance.forEach(function(rows, rowNumbers) {
+				rows.forEach(function (columns, columnNumbers) {
+					columns.oldState = columns.state;
+				})		
+			})	
+			gameInstance.forEach(function(rows, rowNumbers) {
+				rows.forEach(function (columns, columnNumbers) {
+					var liveNeighboursCount = 0;
+					for (var i = rowNumbers - 1; i <= rowNumbers + 1; i++) { // Previous Row, Current Row and Next Row.
+						for (var j = columnNumbers - 1; j <= columnNumbers + 1; j++) { // Previous Column, Current Column and Next Column.
+							if (gameInstance[i] != undefined && gameInstance[i][j] != undefined) {
+								liveNeighboursCount += gameInstance[i][j].oldState; // Count the number of live neighbours, inluding currentCell.
+							}					
+						}
+					}
+					liveNeighboursCount -= columns.oldState; // We added the state of the currentCell for convenience, so we must subtract it.
+
+					if (columns.oldState) {
+						if (liveNeighboursCount < 2 || liveNeighboursCount > 3) {
+							columns.state = 0;
+						}
+						else {
+							columns.state = 1;
+						}
+					} 
+					else {
+						if (liveNeighboursCount == 3) {
+							columns.state = 1;
+						}
+					}
+
+				    // Any live cell with fewer than two live neighbours dies, as if caused by under-population.
+				    // Any live cell with two or three live neighbours lives on to the next generation.
+				    // Any live cell with more than three live neighbours dies, as if by overcrowding.
+				    // Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+				})		
+			})
+		}
+
+		//drawFrame();
+
+		function drawFrame() {	
+			context.fillStyle = "#FFF";
+			context.fillRect(0, 0, 10 * canvasWidth, 10 * canvasHeight);
+			
+			gameInstance.forEach(function(rows, rowNumbers) {
+				rows.forEach(function (value, index) {
+					if (value.state) {		
+						context.fillStyle = "#000";	
+						context.fillRect(cellFrameSize * index, cellFrameSize * rowNumbers, cellSize, cellSize);	
+					}	
+				})		
+			})	
+
+			//Draw Grid
+			context.strokeStyle = "#EEE";
+			context.lineWidth = 1;
+			gameInstance.forEach(function(rows, rowNumbers) {
+				context.beginPath();
+			    context.moveTo(cellFrameSize * rowNumbers, 0);
+			    context.lineTo(cellFrameSize * rowNumbers, canvasHeight);
+			    context.stroke();		
+			})	
+
+			gameInstance[0].forEach(function(columns, columnNumbers) {
+			    context.beginPath();
+			    context.moveTo(0, cellFrameSize * columnNumbers);
+			    context.lineTo(canvasWidth, cellFrameSize * columnNumbers);
+			    context.stroke();	
+			})	
+		}
+
+		function updateCellsAndDrawFrame() {
+			updateCells();
+			drawFrame();
+		}
+
+		var playing;
+		function playFrames() {
+			updateCellsAndDrawFrame();
+
+			setTimeout(
+				function(){
+					if (playing) {
+						playFrames();	
+					}			
+		    	},
+		    	timeBetweenSteps
+		    ); 	
+		}
+
+		var stepButton = document.getElementById("make_step");
+		stepButton.addEventListener("click", function () {
+			playing = false;
+			updateCellsAndDrawFrame();	
+		});
+
+		var playButton = document.getElementById("play");
+		playButton.addEventListener("click", function () {
+			playing = true;
+			playFrames();
+		});
+
+		var pauseButton = document.getElementById("pause");
+		pauseButton.addEventListener("click", function () {
+			playing = false;
+		})
+
+		var clearButton = document.getElementById("clear");
+		clearButton.addEventListener("click", function () {
+			gameInstance.forEach(function(rows, rowNumbers) {
+				rows.forEach(function (columns, columnNumbers) {
+					columns.state = 0;
+				})		
+			})	
+			playing = false;
+			drawFrame();
+		})
+
+		var mousePressed = false;
+		var deleting = true 
+
+		canvas.addEventListener("mousedown", function (event) {
+			mousePressed = true;
+			var currentCell = getCellFromCoordinates(getPosition(event));
+			if (currentCell.state) {
+				deleting = true;
+			}
+			else {
+				deleting = false;
+			}
+			makeLive(event);	
+		});
+
+		// If the mouse button is released ANYWHERE, not just in the canvas, we stop drawing.
+		document.addEventListener("mouseup", function () {
+			mousePressed = false;
+		});
+
+
+		canvas.onmousemove = function (event) { 
+			if (mousePressed) {
+				makeLive(event);
+			}
+		};
+
+		function makeLive(event) {
+			var coordinates = getPosition(event);
+
+			var currentCell = getCellFromCoordinates(coordinates);
+			if (deleting) {
+				currentCell.state = 0;
+			}
+			else {
+				currentCell.state = 1;
+			}
+			if (!playing) {
+				drawFrame();
+			}	
+		}
+
+		function getCellFromCoordinates (coordinates) {
+			var row = getRowFromY(coordinates[1]);
+			var column = getColumnFromX(coordinates[0]);
+			return gameInstance[row][column];
+		}
+		function getRowFromY (y) {
+			return parseInt(y / cellFrameSize);
+		}
+		function getColumnFromX (x) {
+			return parseInt(x / cellFrameSize);
+		}
+
+		function getPosition(event) {
+			x = event.clientX + document.body.scrollLeft + document.documentElement.scrollLeft - canvas.offsetLeft;
+			y = event.clientY + document.body.scrollTop + document.documentElement.scrollTop - canvas.offsetTop;
+
+			return [x, y];
+		}
+	</script>
+</body>
+</html>
